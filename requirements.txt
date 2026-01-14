@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+python-dotenv
+supabase
+cloudinary
+python-multipart
