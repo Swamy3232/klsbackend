@@ -173,7 +173,7 @@ def get_customer(phone: str):
 def get_all_customers():
     try:
         response = supabase.table("goldusers").select(
-            "phone, full_name, approval_status, last_month_paid, remaining_emi"
+            "phone, full_name, approval_status,selected_pack, last_month_paid, remaining_emi"
         ).execute()
 
         return response.data
