@@ -1,5 +1,6 @@
 import os
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, constr
 from supabase import create_client, Client
 from datetime import date, datetime
@@ -7,16 +8,24 @@ from dateutil.relativedelta import relativedelta
 
 app = FastAPI()
 
-# -----------------------------
-# Supabase client setup from environment variables
-# -----------------------------
+# ✅ CORS (ALLOW ALL)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Supabase setup
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
-    raise Exception("Supabase URL or Key not found in environment variables!")
+    raise Exception("Supabase URL or Key not found")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
 
 # -----------------------------
 # Input models
