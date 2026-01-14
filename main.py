@@ -143,3 +143,11 @@ def get_all_customers():
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+@app.get("/customers/all")
+def get_all_customers_full():
+    try:
+        response = supabase.table("goldusers").select("*").execute()
+        return response.data
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
