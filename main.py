@@ -132,3 +132,14 @@ def get_customer(phone: str):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+@app.get("/customers")
+def get_all_customers():
+    try:
+        response = supabase.table("goldusers").select(
+            "phone, full_name, approval_status, last_month_paid, remaining_emi"
+        ).execute()
+
+        return response.data
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
