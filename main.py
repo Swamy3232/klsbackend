@@ -94,23 +94,33 @@ def update_customer(admin_update: AdminUpdate):
         if admin_update.approval_status:
             update_data["approval_status"] = admin_update.approval_status
 
-        # ✅ EMI calculation (Total months ALWAYS 24)
+        # ✅ EMI calculation (ONLY remaining_emi)
         if admin_update.last_month_paid:
-            start_date = datetime.strptime(
-                customer["start_date"], "%Y-%m-%d"
-            ).date()
+            start_date_raw = customer["start_date"]
+
+            # Safe date parsing
+            if isinstance(start_date_raw, str):
+                start_date = datetime.fromisoformat(start_date_raw).date()
+            else:
+                start_date = start_date_raw
 
             last_paid = admin_update.last_month_paid
+
+            if last_paid < start_date:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Last paid date cannot be before start date"
+                )
 
             diff = relativedelta(last_paid, start_date)
             months_paid = diff.years * 12 + diff.months + 1
 
-            pending_emi = max(24 - months_paid, 0)
+            TOTAL_DURATION = 24
+            remaining_emi = max(TOTAL_DURATION - months_paid, 0)
 
             update_data.update({
                 "last_month_paid": str(last_paid),
-                "total_paid_months": months_paid,
-                "remaining_emi": pending_emi
+                "remaining_emi": remaining_emi
             })
 
         if not update_data:
@@ -126,10 +136,11 @@ def update_customer(admin_update: AdminUpdate):
             "updated_fields": update_data
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
+        print("ERROR:", e)
         raise HTTPException(status_code=500, detail=str(e))
-
-
 # -----------------------------
 # GET endpoint for customer details
 # -----------------------------
