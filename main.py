@@ -79,30 +79,56 @@ def create_customer(customer: CustomerCreate):
 @app.put("/update-customer")
 def update_customer(admin_update: AdminUpdate):
     try:
-        existing = supabase.table("goldusers").select("*").eq("phone", admin_update.phone).execute()
-        if not existing.data or len(existing.data) == 0:
+        existing = supabase.table("goldusers") \
+            .select("start_date") \
+            .eq("phone", admin_update.phone) \
+            .execute()
+
+        if not existing.data:
             raise HTTPException(status_code=404, detail="Customer not found")
 
         customer = existing.data[0]
         update_data = {}
 
+        # ✅ Approval status update
         if admin_update.approval_status:
             update_data["approval_status"] = admin_update.approval_status
 
+        # ✅ EMI calculation (Total months ALWAYS 24)
         if admin_update.last_month_paid:
-            update_data["last_month_paid"] = str(admin_update.last_month_paid)
-            start_date = datetime.strptime(customer["start_date"], "%Y-%m-%d").date()
-            months_paid = relativedelta(admin_update.last_month_paid, start_date).months + \
-                          (relativedelta(admin_update.last_month_paid, start_date).years * 12) + 1
-            remaining = max(customer["total_months"] - months_paid, 0)
-            update_data["remaining_emi"] = remaining
+            start_date = datetime.strptime(
+                customer["start_date"], "%Y-%m-%d"
+            ).date()
 
-        supabase.table("goldusers").update(update_data).eq("phone", admin_update.phone).execute()
+            last_paid = admin_update.last_month_paid
 
-        return {"message": "Customer updated successfully", "updated_fields": update_data}
+            diff = relativedelta(last_paid, start_date)
+            months_paid = diff.years * 12 + diff.months + 1
+
+            pending_emi = max(24 - months_paid, 0)
+
+            update_data.update({
+                "last_month_paid": str(last_paid),
+                "total_paid_months": months_paid,
+                "remaining_emi": pending_emi
+            })
+
+        if not update_data:
+            raise HTTPException(status_code=400, detail="No fields to update")
+
+        supabase.table("goldusers") \
+            .update(update_data) \
+            .eq("phone", admin_update.phone) \
+            .execute()
+
+        return {
+            "message": "Customer updated successfully",
+            "updated_fields": update_data
+        }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 # -----------------------------
 # GET endpoint for customer details
