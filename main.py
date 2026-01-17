@@ -108,31 +108,31 @@ def update_customer(admin_update: AdminUpdate):
 # -----------------------------
 # GET endpoint for customer details
 # -----------------------------
-@app.get("/get-customer/{phone}")
-def get_customer(phone: str):
-    try:
-        existing = supabase.table("goldusers").select("*").eq("phone", phone).execute()
-        if not existing.data or len(existing.data) == 0:
-            raise HTTPException(status_code=404, detail="Customer not found")
+# @app.get("/get-customer/{phone}")
+# def get_customer(phone: str):
+#     try:
+#         existing = supabase.table("goldusers").select("*").eq("phone", phone).execute()
+#         if not existing.data or len(existing.data) == 0:
+#             raise HTTPException(status_code=404, detail="Customer not found")
 
-        customer = existing.data[0]
-        start_date = datetime.strptime(customer["start_date"], "%Y-%m-%d").date()
-        end_date = start_date + relativedelta(months=customer["total_months"])
+#         customer = existing.data[0]
+#         start_date = datetime.strptime(customer["start_date"], "%Y-%m-%d").date()
+#         end_date = start_date + relativedelta(months=customer["total_months"])
 
-        return {
-            "phone": customer["phone"],
-            "full_name": customer["full_name"],
-            "address": customer["address"],
-            "selected_pack": customer["selected_pack"],
-            "start_date": customer["start_date"],
-            "last_month_paid": customer["last_month_paid"],
-            "remaining_emi": customer["remaining_emi"],
-            "end_date": str(end_date),
-            "approval_status": customer["approval_status"]
-        }
+#         return {
+#             "phone": customer["phone"],
+#             "full_name": customer["full_name"],
+#             "address": customer["address"],
+#             "selected_pack": customer["selected_pack"],
+#             "start_date": customer["start_date"],
+#             "last_month_paid": customer["last_month_paid"],
+#             "remaining_emi": customer["remaining_emi"],
+#             "end_date": str(end_date),
+#             "approval_status": customer["approval_status"]
+#         }
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
 @app.get("/customers")
 def get_all_customers():
     try:
@@ -194,6 +194,7 @@ class PaymentSummaryResponse(BaseModel):
     payments_count: int
     total_paid: float
     remaining_months: int
+    payment_dates: list = []  # List of all payment dates
 
 @app.get("/gold_user_summary/{phone}", response_model=PaymentSummaryResponse)
 def get_payment_summary(phone: str):
@@ -265,6 +266,55 @@ def get_all_users_payment_summary():
 
         return result
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/gold_user_summary_auth", response_model=PaymentSummaryResponse)
+def get_user_payment_summary_auth(phone: str, password: str):
+    try:
+        # Validate user with phone and password
+        user = supabase.table("goldusers").select("*").eq("phone", phone).execute()
+        
+        if not user.data or len(user.data) == 0:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        user_data = user.data[0]
+        
+        # Verify password
+        if user_data.get("password") != password:
+            raise HTTPException(status_code=401, detail="Invalid phone or password")
+        
+        full_name = user_data["full_name"]
+        total_months = user_data.get("total_months", 0)
+        
+        # Fetch ONLY approved payments for this user
+        payments = (
+            supabase.table("payments")
+            .select("paid_amount, created_at, payment_date")
+            .eq("phone", phone)
+            .eq("approval_status", "approved")
+            .order("created_at", desc=True)
+            .execute()
+        )
+        
+        approved_count = len(payments.data) if payments.data else 0
+        total_paid = sum(p.get("paid_amount", 0) for p in payments.data) if payments.data else 0
+        remaining_months = max(total_months - approved_count, 0)
+        
+        payment_dates = [p.get("payment_date") for p in payments.data] if payments.data else []
+        
+        return PaymentSummaryResponse(
+            phone=phone,
+            full_name=full_name,
+            total_months=total_months,
+            payments_count=approved_count,
+            total_paid=total_paid,
+            remaining_months=remaining_months,
+            payment_dates=payment_dates
+        )
+    
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
