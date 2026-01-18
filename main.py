@@ -195,6 +195,7 @@ class PaymentSummaryResponse(BaseModel):
     total_paid: float
     remaining_months: int
     payment_dates: list = []  # List of all payment dates
+    approval_status: str = "pending"  # User's approval status
 
 @app.get("/gold_user_summary/{phone}", response_model=PaymentSummaryResponse)
 def get_payment_summary(phone: str):
@@ -221,7 +222,8 @@ def get_payment_summary(phone: str):
             total_months=total_months,
             payments_count=payments_count,
             total_paid=total_paid,
-            remaining_months=remaining_months
+            remaining_months=remaining_months,
+            approval_status=user_data.get("approval_status", "pending")
         )
 
     except Exception as e:
@@ -261,7 +263,8 @@ def get_all_users_payment_summary():
                 total_months=total_months,
                 payments_count=approved_count,   # EMI count
                 total_paid=total_paid,           # Only approved amount
-                remaining_months=remaining_months
+                remaining_months=remaining_months,
+                approval_status=user.get("approval_status", "pending")
             ))
 
         return result
@@ -310,7 +313,8 @@ def get_user_payment_summary_auth(phone: str, password: str):
             payments_count=approved_count,
             total_paid=total_paid,
             remaining_months=remaining_months,
-            payment_dates=payment_dates
+            payment_dates=payment_dates,
+            approval_status=user_data.get("approval_status", "pending")
         )
     
     except HTTPException:
