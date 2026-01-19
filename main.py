@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, constr
@@ -34,7 +35,14 @@ class PaymentCreate(BaseModel):
     phone: str = Field(..., example="9876543210")      # Link to goldusers
     paid_amount: float = Field(..., example=5000.00)
     utr_number: str = Field(..., example="UTR123456789")
-
+class MetalRateModel(BaseModel):
+    metal_type: str
+    purity: Optional[str] = None
+    rate_per_gram: Optional[float] = None
+    rate_per_carat: Optional[float] = None
+    currency: Optional[str] = "INR"
+    effective_date: date
+    updated_by: Optional[str] = None
 # -----------------------------
 # Input models
 # -----------------------------
@@ -359,5 +367,78 @@ def get_all_payments():
     try:
         payments = supabase.table("payments").select("*").order("payment_date", desc=True).execute()
         return payments.data  # List of all payments
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+@app.post("/create-metal-rate")
+def create_metal_rate(data: MetalRateModel):
+    try:
+        result = (
+            supabase.table("metal_rates")
+            .insert({
+                "metal_type": data.metal_type,
+                "purity": data.purity,
+                "rate_per_gram": data.rate_per_gram,
+                "rate_per_carat": data.rate_per_carat,
+                "currency": data.currency,
+                "effective_date": data.effective_date.isoformat(),
+                "updated_by": data.updated_by
+            })
+            .execute()
+        )
+
+        return {
+            "message": "Metal rate created successfully",
+            "data": result.data
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+@app.get("/get-metal-rates")
+def get_metal_rates(metal_type: str | None = None):
+    try:
+        query = supabase.table("metal_rates").select("*")
+
+        if metal_type:
+            query = query.eq("metal_type", metal_type)
+
+        result = query.order("effective_date", desc=True).execute()
+
+        return {
+            "count": len(result.data),
+            "data": result.data
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+@app.put("/update-metal-rate")
+def update_metal_rate(data: MetalRateModel):
+    try:
+        result = (
+            supabase.table("metal_rates")
+            .update({
+                "purity": data.purity,
+                "rate_per_gram": data.rate_per_gram,
+                "rate_per_carat": data.rate_per_carat,
+                "currency": data.currency,
+                "updated_by": data.updated_by,
+                "updated_at": "now()"
+            })
+            .eq("metal_type", data.metal_type)
+            .eq("effective_date", data.effective_date.isoformat())
+            .execute()
+        )
+
+        if not result.data:
+            raise HTTPException(
+                status_code=404,
+                detail="Metal rate not found for given metal_type and effective_date"
+            )
+
+        return {
+            "message": "Metal rate updated successfully",
+            "metal_type": data.metal_type,
+            "effective_date": data.effective_date,
+        }
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
