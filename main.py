@@ -30,12 +30,7 @@ if not SUPABASE_URL or not SUPABASE_KEY:
     raise Exception("Supabase URL or Key not found")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-class MetalRateUpdateModel(BaseModel):
-    purity: str
-    rate_per_gram: float
-    rate_per_carat: float | None = None
-    currency: str
-    updated_by: str
+
 class PaymentCreate(BaseModel):
     phone: str = Field(..., example="9876543210")      # Link to goldusers
     paid_amount: float = Field(..., example=5000.00)
@@ -399,15 +394,14 @@ def create_metal_rate(data: MetalRateModel):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 @app.get("/get-metal-rates")
-def get_metal_rates():
+def get_metal_rates(metal_type: str | None = None):
     try:
-        result = (
-            supabase
-            .table("metal_rates")
-            .select("*")
-            .order("effective_date", desc=True)
-            .execute()
-        )
+        query = supabase.table("metal_rates").select("*")
+
+        if metal_type:
+            query = query.eq("metal_type", metal_type)
+
+        result = query.order("effective_date", desc=True).execute()
 
         return {
             "count": len(result.data),
@@ -416,8 +410,8 @@ def get_metal_rates():
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-@app.put("/update-metal-rate/{rate_id}")
-def update_metal_rate(rate_id: int, data: MetalRateUpdateModel):
+@app.put("/update-metal-rate")
+def update_metal_rate(data: MetalRateModel):
     try:
         result = (
             supabase.table("metal_rates")
@@ -429,19 +423,21 @@ def update_metal_rate(rate_id: int, data: MetalRateUpdateModel):
                 "updated_by": data.updated_by,
                 "updated_at": "now()"
             })
-            .eq("id", rate_id)
+            .eq("metal_type", data.metal_type)
+            .eq("effective_date", data.effective_date.isoformat())
             .execute()
         )
 
         if not result.data:
             raise HTTPException(
                 status_code=404,
-                detail="Metal rate not found for given id"
+                detail="Metal rate not found for given metal_type and effective_date"
             )
 
         return {
             "message": "Metal rate updated successfully",
-            "id": rate_id
+            "metal_type": data.metal_type,
+            "effective_date": data.effective_date,
         }
 
     except Exception as e:
