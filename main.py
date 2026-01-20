@@ -36,12 +36,13 @@ class PaymentCreate(BaseModel):
     paid_amount: float = Field(..., example=5000.00)
     utr_number: str = Field(..., example="UTR123456789")
 class MetalRateModel(BaseModel):
-    metal_type: str
+    id: Optional[int] = None   # used only for update
+    metal_type: Optional[str] = None
     purity: Optional[str] = None
     rate_per_gram: Optional[float] = None
     rate_per_carat: Optional[float] = None
     currency: Optional[str] = "INR"
-    effective_date: date
+    effective_date: Optional[date] = None
     updated_by: Optional[str] = None
 # -----------------------------
 # Input models
@@ -393,15 +394,17 @@ def create_metal_rate(data: MetalRateModel):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/get-metal-rates")
-def get_metal_rates(metal_type: str | None = None):
+def get_metal_rates():
     try:
-        query = supabase.table("metal_rates").select("*")
-
-        if metal_type:
-            query = query.eq("metal_type", metal_type)
-
-        result = query.order("effective_date", desc=True).execute()
+        result = (
+            supabase
+            .table("metal_rates")
+            .select("*")
+            .order("effective_date", desc=True)
+            .execute()
+        )
 
         return {
             "count": len(result.data),
@@ -410,34 +413,38 @@ def get_metal_rates(metal_type: str | None = None):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 @app.put("/update-metal-rate")
 def update_metal_rate(data: MetalRateModel):
+    if not data.id:
+        raise HTTPException(status_code=400, detail="ID is required for update")
+
     try:
+        update_data = {
+            "purity": data.purity,
+            "rate_per_gram": data.rate_per_gram,
+            "rate_per_carat": data.rate_per_carat,
+            "currency": data.currency,
+            "updated_by": data.updated_by,
+            "updated_at": "now()"
+        }
+
+        # remove None values
+        update_data = {k: v for k, v in update_data.items() if v is not None}
+
         result = (
             supabase.table("metal_rates")
-            .update({
-                "purity": data.purity,
-                "rate_per_gram": data.rate_per_gram,
-                "rate_per_carat": data.rate_per_carat,
-                "currency": data.currency,
-                "updated_by": data.updated_by,
-                "updated_at": "now()"
-            })
-            .eq("metal_type", data.metal_type)
-            .eq("effective_date", data.effective_date.isoformat())
+            .update(update_data)
+            .eq("id", data.id)
             .execute()
         )
 
         if not result.data:
-            raise HTTPException(
-                status_code=404,
-                detail="Metal rate not found for given metal_type and effective_date"
-            )
+            raise HTTPException(status_code=404, detail="Metal rate not found")
 
         return {
             "message": "Metal rate updated successfully",
-            "metal_type": data.metal_type,
-            "effective_date": data.effective_date,
+            "id": data.id
         }
 
     except Exception as e:
