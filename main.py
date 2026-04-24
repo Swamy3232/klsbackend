@@ -12,7 +12,8 @@ from dotenv import load_dotenv
 # Load variables from .env
 load_dotenv()
 app = FastAPI()
-
+ADMIN_USER = os.getenv("ADMIN_USER")
+ADMIN_PASS = os.getenv("ADMIN_PASS")
 # ✅ CORS (ALLOW ALL)
 app.add_middleware(
     CORSMiddleware,
@@ -21,7 +22,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
+class LoginRequest(BaseModel):
+    username: str
+    password: str
 # Supabase setup
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
@@ -156,7 +159,7 @@ def get_all_customers():
 @app.get("/customers/all")
 def get_all_customers_full():
     try:
-        response = supabase.table("goldusers").select("*").execute()
+        response = supabase.table("goldusers").select("phone, full_name, address, start_date, total_months, created_at, approval_status").execute()
         return response.data
 
     except Exception as e:
@@ -449,3 +452,10 @@ def update_metal_rate(data: MetalRateModel):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/login")
+def login(data: LoginRequest):
+    if data.username == ADMIN_USER and data.password == ADMIN_PASS:
+        return {"success": True, "message": "Login successful"}
+    
+    raise HTTPException(status_code=401, detail="Invalid credentials")
