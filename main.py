@@ -7,6 +7,7 @@ from supabase import create_client, Client
 from datetime import date, datetime
 from dateutil.relativedelta import relativedelta
 import os
+import requests
 from dotenv import load_dotenv
 
 # Load variables from .env
@@ -47,6 +48,7 @@ class MetalRateModel(BaseModel):
     currency: Optional[str] = "INR"
     effective_date: Optional[date] = None
     updated_by: Optional[str] = None
+    
 # -----------------------------
 # Input models
 # -----------------------------
@@ -62,6 +64,45 @@ class CustomerCreate(BaseModel):
 class AdminUpdate(BaseModel):
     phone: str
     approval_status: str  # should be "approved" or "rejected"
+
+# Store these in environment variables for production
+ONESIGNAL_APP_ID = os.getenv("ONESIGNAL_APP_ID", "6e72c733-4309-417c-baeb-669275cd8c33")
+ONESIGNAL_API_KEY = os.getenv("ONESIGNAL_API_KEY", "YOUR_API_KEY")
+
+
+class NotificationRequest(BaseModel):
+    title: str
+    message: str
+
+
+@app.post("/send-notification")
+def send_notification(data: NotificationRequest):
+    url = "https://onesignal.com/api/v1/notifications"
+
+    payload = {
+        "app_id": ONESIGNAL_APP_ID,
+        "included_segments": ["All"],
+        "headings": {"en": data.title},
+        "contents": {"en": data.message},
+    }
+
+    headers = {
+        "Authorization": f"Basic {ONESIGNAL_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    response = requests.post(url, json=payload, headers=headers)
+
+    if response.status_code not in [200, 201]:
+        raise HTTPException(
+            status_code=response.status_code,
+            detail=response.json()
+        )
+
+    return {
+        "success": True,
+        "onesignal_response": response.json()
+    }
 
 # -----------------------------
 # POST endpoint for customer creation
