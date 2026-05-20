@@ -9,6 +9,7 @@ from dateutil.relativedelta import relativedelta
 import os
 import requests
 from dotenv import load_dotenv
+import time
 
 # Load variables from .env
 load_dotenv()
@@ -29,6 +30,13 @@ class LoginRequest(BaseModel):
 # Supabase setup
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+GOLD_API_KEY = "goldapi-317hrsmkkp62vm-io"
+GOLD_API_URL = "https://www.goldapi.io/api/XAU/INR"
+cached_data = None
+last_updated = 0
+
+# Cache duration in seconds
+CACHE_DURATION = 30
 
 if not SUPABASE_URL or not SUPABASE_KEY:
     raise Exception("Supabase URL or Key not found")
@@ -500,3 +508,70 @@ def login(data: LoginRequest):
         return {"success": True, "message": "Login successful"}
     
     raise HTTPException(status_code=401, detail="Invalid credentials")
+@app.get("/gold-price")
+def get_gold_price():
+    global cached_data, last_updated
+
+    current_time = time.time()
+
+    # Return cache if valid
+    if cached_data and (current_time - last_updated < CACHE_DURATION):
+        return cached_data
+
+    try:
+        headers = {
+            "x-access-token": GOLD_API_KEY,
+            "Content-Type": "application/json"
+        }
+
+        response = requests.get(GOLD_API_URL, headers=headers)
+
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=response.text
+            )
+
+        data = response.json()
+
+        # Raw API prices
+        raw_24k = data.get("price_gram_24k", 0)
+        raw_22k = data.get("price_gram_22k", 0)
+        raw_18k = data.get("price_gram_18k", 0)
+
+        # Target Indian retail 24K price
+        TARGET_24K_PRICE = 15990
+
+        # Dynamic multiplier
+        multiplier = TARGET_24K_PRICE / raw_24k
+
+        # Converted retail prices
+        retail_24k = round(raw_24k * multiplier, 2)
+        retail_22k = round(raw_22k * multiplier, 2)
+        retail_18k = round(raw_18k * multiplier, 2)
+
+        result = {
+            "source": "live",
+            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "currency": "INR",
+
+            "market_price": {
+                "24k_per_gram": retail_24k,
+                "22k_per_gram": retail_22k,
+                "18k_per_gram": retail_18k
+            },
+
+            "raw_exchange_price": {
+                "24k_per_gram": round(raw_24k, 2),
+                "22k_per_gram": round(raw_22k, 2),
+                "18k_per_gram": round(raw_18k, 2)
+            }
+        }
+
+        cached_data = result
+        last_updated = current_time
+
+        return result
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
