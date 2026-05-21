@@ -576,10 +576,10 @@ def get_gold_price():
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID")
-RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET")
+key_id = os.getenv("key_id")
+key_secret = os.getenv("key_secret")
 
-client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+client = razorpay.Client(auth=(key_id, key_secret))
 
 class Order(BaseModel):
     amount: int
