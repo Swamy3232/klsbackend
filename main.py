@@ -31,7 +31,7 @@ class LoginRequest(BaseModel):
 # Supabase setup
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-GOLD_API_KEY = "goldapi-317hrsmkkp62vm-io"
+GOLD_API_KEY = "goldapi-585a379d558f4a2400962a4bcaebb615-io"
 GOLD_API_URL = "https://www.goldapi.io/api/XAU/INR"
 cached_data = None
 last_updated = 0
@@ -509,6 +509,16 @@ def login(data: LoginRequest):
         return {"success": True, "message": "Login successful"}
     
     raise HTTPException(status_code=401, detail="Invalid credentials")
+from fastapi import HTTPException
+from datetime import datetime
+import requests
+import time
+
+cached_data = None
+last_updated = 0
+CACHE_DURATION = 28800  # 1 hour
+
+
 @app.get("/gold-price")
 def get_gold_price():
     global cached_data, last_updated
@@ -525,9 +535,31 @@ def get_gold_price():
             "Content-Type": "application/json"
         }
 
-        response = requests.get(GOLD_API_URL, headers=headers)
+        response = requests.get(
+            GOLD_API_URL,
+            headers=headers,
+            timeout=10
+        )
 
+        # API failed or quota exceeded
         if response.status_code != 200:
+
+            # fallback from database
+            db_res = (
+                supabase
+                .table("gold_price")
+                .select("*")
+                .order("updated_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+
+            if db_res.data:
+                return {
+                    "source": "database_fallback",
+                    **db_res.data[0]
+                }
+
             raise HTTPException(
                 status_code=response.status_code,
                 detail=response.text
@@ -540,13 +572,11 @@ def get_gold_price():
         raw_22k = data.get("price_gram_22k", 0)
         raw_18k = data.get("price_gram_18k", 0)
 
-        # Target Indian retail 24K price
+        # Your retail adjustment
         TARGET_24K_PRICE = 15990
 
-        # Dynamic multiplier
         multiplier = TARGET_24K_PRICE / raw_24k
 
-        # Converted retail prices
         retail_24k = round(raw_24k * multiplier, 2)
         retail_22k = round(raw_22k * multiplier, 2)
         retail_18k = round(raw_18k * multiplier, 2)
@@ -569,6 +599,14 @@ def get_gold_price():
             }
         }
 
+        # Save latest data in DB
+        supabase.table("gold_price").insert({
+            "price_24k": retail_24k,
+            "price_22k": retail_22k,
+            "updated_at": datetime.now().isoformat()
+        }).execute()
+
+        # Cache
         cached_data = result
         last_updated = current_time
 
