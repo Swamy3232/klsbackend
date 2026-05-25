@@ -234,6 +234,20 @@ def get_all_customers_full():
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/get-fixed-amount/{phone}")
+def get_fixed_amount(phone: str):
+    try:
+        user = supabase.table("goldusers").select("fixed_amount").eq("phone", phone).execute()
+        if not user.data or len(user.data) == 0:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        return {"phone": phone, "fixed_amount": user.data[0].get("fixed_amount", 0)}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 class PaymentCreate(BaseModel):
     phone: str = Field(..., example="9876543210")      # User's phone number
     paid_amount: float = Field(..., example=5000.00)
@@ -278,7 +292,7 @@ class PaymentSummaryResponse(BaseModel):
     remaining_months: int
     payment_dates: list = []  # List of all payment dates
     approval_status: str = "pending"  # User's approval status
-    fixed_amount: int
+    fixed_amount: Optional[int] = 0
 
 @app.get("/gold_user_summary/{phone}", response_model=PaymentSummaryResponse)
 def get_payment_summary(phone: str):
