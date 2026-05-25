@@ -69,7 +69,7 @@ class CustomerCreate(BaseModel):
     # selected_pack: str
     start_date: date
     total_months: int
-    fixed_amount: float
+    fixed_amount: int
 
 class AdminUpdate(BaseModel):
     phone: str
@@ -278,7 +278,7 @@ class PaymentSummaryResponse(BaseModel):
     remaining_months: int
     payment_dates: list = []  # List of all payment dates
     approval_status: str = "pending"  # User's approval status
-    fixed_amount: float
+    fixed_amount: int
 
 @app.get("/gold_user_summary/{phone}", response_model=PaymentSummaryResponse)
 def get_payment_summary(phone: str):
