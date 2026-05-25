@@ -69,6 +69,7 @@ class CustomerCreate(BaseModel):
     # selected_pack: str
     start_date: date
     total_months: int
+    fixed_amount: float
 
 class AdminUpdate(BaseModel):
     phone: str
@@ -134,6 +135,7 @@ def create_customer(customer: CustomerCreate):
             "approval_status": "pending",
             
             "total_months": customer.total_months,
+            "fixed_amount": customer.fixed_amount,
            
         }).execute()
 
@@ -199,17 +201,35 @@ def update_customer(admin_update: AdminUpdate):
 def get_all_customers():
     try:
         response = supabase.table("goldusers").select(
-            "phone, full_name, approval_status, created_at"
+            "phone, full_name, approval_status, created_at, fixed_amount"
         ).execute()
 
         return response.data
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/customers/{phone}")
+def delete_customer(phone: str):
+    try:
+        # Check if customer exists
+        existing = supabase.table("goldusers").select("phone").eq("phone", phone).execute()
+        if not existing.data:
+            raise HTTPException(status_code=404, detail="Customer not found")
+
+        # Delete customer
+        supabase.table("goldusers").delete().eq("phone", phone).execute()
+
+        return {"message": f"Customer {phone} deleted successfully"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 @app.get("/customers/all")
 def get_all_customers_full():
     try:
-        response = supabase.table("goldusers").select("phone, full_name, address, start_date, total_months, created_at, approval_status").execute()
+        response = supabase.table("goldusers").select("phone, full_name, address, start_date, total_months, created_at, approval_status, fixed_amount").execute()
         return response.data
 
     except Exception as e:
@@ -258,6 +278,7 @@ class PaymentSummaryResponse(BaseModel):
     remaining_months: int
     payment_dates: list = []  # List of all payment dates
     approval_status: str = "pending"  # User's approval status
+    fixed_amount: float
 
 @app.get("/gold_user_summary/{phone}", response_model=PaymentSummaryResponse)
 def get_payment_summary(phone: str):
@@ -270,6 +291,7 @@ def get_payment_summary(phone: str):
         user_data = user.data[0]
         full_name = user_data["full_name"]
         total_months = user_data.get("total_months", 0)
+        fixed_amount = user_data.get("fixed_amount", 0)
         
         # Fetch all payments for this user
         payments = supabase.table("payments").select("*").eq("phone", phone).execute()
@@ -285,7 +307,8 @@ def get_payment_summary(phone: str):
             payments_count=payments_count,
             total_paid=total_paid,
             remaining_months=remaining_months,
-            approval_status=user_data.get("approval_status", "pending")
+            approval_status=user_data.get("approval_status", "pending"),
+            fixed_amount=fixed_amount
         )
 
     except Exception as e:
@@ -304,6 +327,7 @@ def get_all_users_payment_summary():
             phone = user["phone"]
             full_name = user["full_name"]
             total_months = user.get("total_months", 0)
+            fixed_amount = user.get("fixed_amount", 0)
 
             # Fetch ONLY approved payments for this user
             payments = (
@@ -326,7 +350,8 @@ def get_all_users_payment_summary():
                 payments_count=approved_count,   # EMI count
                 total_paid=total_paid,           # Only approved amount
                 remaining_months=remaining_months,
-                approval_status=user.get("approval_status", "pending")
+                approval_status=user.get("approval_status", "pending"),
+                fixed_amount=fixed_amount
             ))
 
         return result
@@ -351,6 +376,7 @@ def get_user_payment_summary_auth(phone: str, password: str):
         
         full_name = user_data["full_name"]
         total_months = user_data.get("total_months", 0)
+        fixed_amount = user_data.get("fixed_amount", 0)
         
         # Fetch ONLY approved payments for this user
         payments = (
@@ -376,7 +402,8 @@ def get_user_payment_summary_auth(phone: str, password: str):
             total_paid=total_paid,
             remaining_months=remaining_months,
             payment_dates=payment_dates,
-            approval_status=user_data.get("approval_status", "pending")
+            approval_status=user_data.get("approval_status", "pending"),
+            fixed_amount=fixed_amount
         )
     
     except HTTPException:
@@ -414,6 +441,24 @@ def update_payment(update: PaymentUpdateByCreatedAt):
             "approval_status": update.approval_status
         }
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/payments/{phone}/{created_at}")
+def delete_payment(phone: str, created_at: str):
+    try:
+        # Check if payment exists
+        existing = supabase.table("payments").select("phone").eq("phone", phone).eq("created_at", created_at).execute()
+        if not existing.data:
+            raise HTTPException(status_code=404, detail="Payment not found")
+
+        # Delete payment
+        supabase.table("payments").delete().eq("phone", phone).eq("created_at", created_at).execute()
+
+        return {"message": f"Payment for {phone} at {created_at} deleted successfully"}
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 @app.get("/payments")
